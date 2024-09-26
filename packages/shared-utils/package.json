@@ -1,0 +1,15 @@
+{
+    "name": "shared-utils",
+    "version": "1.0.0",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "clean": "rimraf dist",
+        "prepublishOnly": "npm run build"
+    },
+    "devDependencies": {
+        "typescript": "^4.5.0",
+        "rimraf": "^3.0.2"
+    }
+}

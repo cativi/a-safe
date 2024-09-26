@@ -1,0 +1,58 @@
+// a-safe/packages/api/tsconfig.json
+{
+    "compilerOptions": {
+        "target": "es2020",
+        "module": "commonjs",
+        "outDir": "./dist",
+        "rootDir": ".",
+        "strict": true,
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "moduleResolution": "node",
+        "sourceMap": true,
+        "declaration": true,
+        "declarationMap": true,
+        "composite": true,
+        "baseUrl": ".",
+        "paths": {
+            "@prisma/client": [
+                "./node_modules/@prisma/client"
+            ],
+            "shared-utils": [
+                "../shared-utils/src"
+            ],
+            "@utils/*": [
+                "types/*"
+            ]
+        },
+        "lib": [
+            "es2020",
+            "dom"
+        ],
+        "skipLibCheck": true,
+        "types": [
+            "node",
+            "jest",
+            "@fastify/jwt",
+            "@fastify/multipart",
+            "@fastify/websocket",
+            "socket.io"
+        ]
+    },
+    "include": [
+        "**/*.ts",
+        "types/**/*.d.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "tests"
+    ],
+    "references": [
+        {
+            "path": "../shared-utils"
+        }
+    ]
+}

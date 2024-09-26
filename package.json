@@ -1,0 +1,40 @@
+{
+  "name": "a-safe",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "Carlos <hola@cafeconcarlos.com>",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "yarn workspace api start",
+    "build": "yarn workspace shared-utils build && yarn workspace api build",
+    "test": "yarn workspaces run test",
+    "lint": "yarn workspaces run lint"
+  },
+  "devDependencies": {
+    "@fastify/swagger": "^8.3.1",
+    "@fastify/swagger-ui": "^1.x",
+    "fastify": "^4.x",
+    "lerna": "^8.1.8",
+    "prisma": "^5.19.1",
+    "typescript": "^5.6.2"
+  },
+  "resolutions": {
+    "braces": "^3.0.2",
+    "micromatch": "^4.0.5",
+    "anymatch": "^3.1.2",
+    "chokidar": "^3.5.3",
+    "readdirp": "^3.6.0",
+    "cpx": "^1.5.0"
+  },
+  "dependencies": {
+    "glob": "^11.0.0",
+    "parse-path": "^7.0.0",
+    "parse-url": "^9.2.0",
+    "tar": "^7.4.3",
+    "tough-cookie": "^5.0.0"
+  }
+}
