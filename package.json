@@ -17,24 +17,22 @@
   "devDependencies": {
     "@fastify/swagger": "^8.3.1",
     "@fastify/swagger-ui": "^1.x",
-    "fastify": "^4.x",
     "lerna": "^8.1.8",
     "prisma": "^5.19.1",
     "typescript": "^5.6.2"
   },
   "resolutions": {
+    "fast-jwt": "^3.3.3",
     "braces": "^3.0.2",
     "micromatch": "^4.0.5",
     "anymatch": "^3.1.2",
     "chokidar": "^3.5.3",
     "readdirp": "^3.6.0",
-    "cpx": "^1.5.0"
+    "cpx": "^1.5.0",
+    "glob": "^9.3.5",
+    "rimraf": "^3.0.2"
   },
-  "dependencies": {
-    "glob": "^11.0.0",
-    "parse-path": "^7.0.0",
-    "parse-url": "^9.2.0",
-    "tar": "^7.4.3",
-    "tough-cookie": "^5.0.0"
+  "engines": {
+    "node": ">=16"
   }
 }

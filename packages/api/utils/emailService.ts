@@ -2,37 +2,40 @@
 
 import nodemailer from 'nodemailer';
 
-export const createTransporter = () => {
+// Function to create a Nodemailer transporter for sending emails using Gmail
+export function createTransporter() {
     return nodemailer.createTransport({
-        host: process.env.EMAIL_HOST,
-        port: parseInt(process.env.EMAIL_PORT || '587'),
-        secure: process.env.EMAIL_SECURE === 'true',
+        service: 'gmail', // Use Gmail service for sending emails
         auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
-        },
+            user: process.env.EMAIL_USER, // Gmail user from environment variables
+            pass: process.env.EMAIL_PASS // Gmail password from environment variables
+        }
     });
-};
+}
 
-let transporter = createTransporter();
-
+// Function to send an email to a specified recipient
 export async function sendEmail(to: string, subject: string, text: string) {
+    // Create the transporter using the Gmail configuration
+    const transporter = createTransporter();
+
+    // Define email options, including the sender, recipient, subject, and body text
     const mailOptions = {
-        from: process.env.EMAIL_FROM,
-        to,
-        subject,
-        text,
+        from: process.env.EMAIL_USER, // Sender email address
+        to: to, // Recipient email address
+        subject: subject, // Subject of the email
+        text: text, // Body text of the email
     };
 
     try {
+        // Send the email using the configured transporter
         await transporter.sendMail(mailOptions);
+
+        // Log a success message if not in a testing environment
+        if (process.env.NODE_ENV !== 'test') {
+            console.log('Email sent successfully');
+        }
     } catch (error) {
+        // Log an error message if email sending fails
         console.error('Error sending email:', error);
-        throw new Error('Failed to send email');
     }
 }
-
-// For testing purposes
-export const setTransporter = (newTransporter: nodemailer.Transporter) => {
-    transporter = newTransporter;
-};

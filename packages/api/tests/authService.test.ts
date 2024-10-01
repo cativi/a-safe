@@ -37,6 +37,13 @@ import { registerUser, authenticateUser, getAllUsers, getUser, updateUser, delet
 describe('AuthService', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        // Reset mock database
+        mockPrismaCreate.mockReset();
+        mockPrismaFindUnique.mockReset();
+        mockPrismaFindMany.mockReset();
+        mockPrismaUpdate.mockReset();
+        mockPrismaDelete.mockReset();
+        mockPrismaFindFirst.mockReset();
     });
 
     describe('registerUser', () => {
@@ -49,6 +56,7 @@ describe('AuthService', () => {
             const hashedPassword = 'hashedPassword';
             const emailVerificationToken = 'mockVerificationToken';
 
+            mockPrismaFindUnique.mockResolvedValue(null);
             (bcrypt.hash as jest.Mock).mockResolvedValue(hashedPassword);
             (uuidv4 as jest.Mock).mockReturnValue(emailVerificationToken);
             mockPrismaCreate.mockResolvedValue({ ...mockUser, id: '1', role: 'USER', emailVerificationToken });
@@ -78,7 +86,6 @@ describe('AuthService', () => {
             });
         });
 
-
         it('should throw an error if user already exists', async () => {
             const mockUser = {
                 email: 'existinguser@example.com',
@@ -89,6 +96,29 @@ describe('AuthService', () => {
             mockPrismaFindUnique.mockResolvedValue({ id: '1' });
 
             await expect(registerUser(mockUser)).rejects.toThrow('Email already exists');
+        });
+
+        it('should handle case when name is not provided', async () => {
+            const mockUser = {
+                email: 'newuser@example.com',
+                password: 'password123',
+            };
+            const hashedPassword = 'hashedPassword';
+            const emailVerificationToken = 'mockVerificationToken';
+
+            mockPrismaFindUnique.mockResolvedValue(null);
+            (bcrypt.hash as jest.Mock).mockResolvedValue(hashedPassword);
+            (uuidv4 as jest.Mock).mockReturnValue(emailVerificationToken);
+            mockPrismaCreate.mockResolvedValue({ ...mockUser, id: '1', role: 'USER', emailVerificationToken, name: '' });
+
+            const result = await registerUser(mockUser);
+
+            expect(mockPrismaCreate).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({
+                    name: '',
+                }),
+            }));
+            expect(result.name).toBe('');
         });
     });
 
@@ -164,10 +194,40 @@ describe('AuthService', () => {
             (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
             const result = await authenticateUser(email, password);
-            expect(result).toEqual({ token: null, message: 'Email not verified' });
+            expect(result).toEqual({ token: null, message: 'Email not verified. Please verify your email before logging in.' });
+        });
+
+        it('should handle password comparison error', async () => {
+            const mockUser = {
+                id: '1',
+                email: 'user@example.com',
+                password: 'hashedPassword',
+                role: 'USER',
+                emailVerified: true,
+            };
+            const email = 'user@example.com';
+            const password = 'password123';
+
+            mockPrismaFindUnique.mockResolvedValue(mockUser);
+            (bcrypt.compare as jest.Mock).mockRejectedValue(new Error('Comparison error'));
+
+            // Mock console.error
+            const mockConsoleError = jest.spyOn(console, 'error').mockImplementation(() => { });
+
+            const result = await authenticateUser(email, password);
+
+            expect(result).toEqual({ token: null, message: 'Internal server error' });
+            expect(mockConsoleError).toHaveBeenCalledWith(
+                "Error during password comparison for user:",
+                email,
+                "Error:",
+                expect.any(Error)
+            );
+
+            // Restore console.error
+            mockConsoleError.mockRestore();
         });
     });
-
 
     describe('getAllUsers', () => {
         it('should return all users', async () => {
@@ -215,7 +275,7 @@ describe('AuthService', () => {
             mockPrismaUpdate.mockResolvedValue(updatedUser);
             (bcrypt.hash as jest.Mock).mockResolvedValue('new_hashed_password');
 
-            const result = await updateUser('1', { email: 'updated@example.com', name: 'Updated User', password: 'newpassword' });
+            const result = await updateUser('1', { email: 'updated@example.com', name: 'Updated User', password: 'newpassword' }, '1', 'ADMIN');
 
             expect(result).toEqual(updatedUser);
             expect(mockPrismaUpdate).toHaveBeenCalledWith({
@@ -228,6 +288,20 @@ describe('AuthService', () => {
                 select: { id: true, email: true, name: true, role: true },
             });
         });
+
+        it('should throw an error if non-admin user tries to update another user', async () => {
+            await expect(updateUser('1', { name: 'New Name' }, '2', 'USER'))
+                .rejects.toThrow('Unauthorized: You can only update your own information or act as an admin.');
+        });
+
+        it('should allow admin to update any user', async () => {
+            const updatedUser = { id: '1', email: 'user@example.com', name: 'New Name', role: 'USER' };
+            mockPrismaUpdate.mockResolvedValue(updatedUser);
+
+            const result = await updateUser('1', { name: 'New Name' }, '2', 'ADMIN');
+
+            expect(result).toEqual(updatedUser);
+        });
     });
 
     describe('deleteUser', () => {
@@ -235,13 +309,18 @@ describe('AuthService', () => {
             const deletedUser = { id: '1', email: 'deleted@example.com', name: 'Deleted User', role: 'USER' };
             mockPrismaDelete.mockResolvedValue(deletedUser);
 
-            const result = await deleteUser('1');
+            const result = await deleteUser('1', 'ADMIN');
 
             expect(result).toEqual(deletedUser);
             expect(mockPrismaDelete).toHaveBeenCalledWith({
                 where: { id: '1' },
                 select: { id: true, email: true, name: true, role: true },
             });
+        });
+
+        it('should throw an error if non-admin user tries to delete a user', async () => {
+            await expect(deleteUser('1', 'USER'))
+                .rejects.toThrow('Unauthorized: Only admins can delete users.');
         });
     });
 

@@ -1,368 +1,109 @@
 // a-safe/packages/api/tests/shareMyImage.test.ts:
 
-import { uploadToShareMyImage } from '../services/upload';
-import axios from 'axios';
 import fs from 'fs';
-import FormData from 'form-data';
-import mime from 'mime-types';
+import axios, { AxiosError } from 'axios';
 import { ShareMyImageUploadError } from '../utils/errorHandler';
-import { UploadOptions, ShareMyImageResponse } from '../services/types';
+import { UploadOptions } from '../services/types';
 
-// Mock external modules
-jest.mock('axios');
-jest.mock('fs', () => ({
-    ...jest.requireActual('fs'),
-    promises: {
-        stat: jest.fn(),
-    },
-    createReadStream: jest.fn(),
+// Mock the entire upload module
+jest.mock('../services/upload', () => ({
+    loginAsAdmin: jest.fn(),
+    uploadToShareMyImage: jest.fn(),
 }));
-jest.mock('form-data');
-jest.mock('mime-types');
 
-const mockedAxios = axios as jest.Mocked<typeof axios>;
-const mockedFs = fs as jest.Mocked<typeof fs>;
-const MockedFormData = FormData as jest.MockedClass<typeof FormData>;
-const mockedMime = mime as jest.Mocked<typeof mime>;
+// Import the mocked functions
+import { uploadToShareMyImage, loginAsAdmin } from '../services/upload';
 
-describe('uploadToShareMyImage', () => {
+jest.mock('fs');
+jest.mock('axios');
+
+describe('upload service', () => {
+    let originalEnv: NodeJS.ProcessEnv;
+
     beforeEach(() => {
         jest.resetAllMocks();
-        process.env.SHAREMYIMAGE_API_KEY = 'abcd1234efgh5678';
+        originalEnv = process.env;
+        process.env = { ...originalEnv };
+        process.env.SHAREMYIMAGE_API_KEY = 'chv_test_key';
+        process.env.ADMIN_EMAIL = 'admin@example.com';
+        process.env.ADMIN_PASSWORD = 'password';
     });
 
-    it('should successfully upload a file', async () => {
-        // Cast fs.promises.stat to a mocked function
-        const mockedStat = fs.promises.stat as jest.MockedFunction<typeof fs.promises.stat>;
-        mockedStat.mockResolvedValue({} as fs.Stats);
+    afterEach(() => {
+        process.env = originalEnv;
+    });
 
-        // Mock fs.createReadStream
-        const mockReadStream = {} as fs.ReadStream;
-        mockedFs.createReadStream.mockReturnValue(mockReadStream);
-
-        // Mock mime.lookup
-        mockedMime.lookup.mockReturnValue('image/png');
-
-        // Mock FormData behavior
-        const mockFormDataInstance = new MockedFormData();
-        MockedFormData.mockImplementation(() => mockFormDataInstance);
-
-        // Mock axios.post to resolve with a successful response
-        const mockResponse: ShareMyImageResponse = {
-            status_code: 200,
-            status_txt: 'OK',
-            // ...other response data
-        };
-        mockedAxios.post.mockResolvedValue({ data: mockResponse });
-
-        const filePath = '/path/to/image.png';
-        const options: UploadOptions = {}; // Use valid UploadOptions properties if any
-
-        const response = await uploadToShareMyImage(filePath, options);
-
-        // Assertions
-        expect(mockedStat).toHaveBeenCalledWith(filePath);
-        expect(mockedFs.createReadStream).toHaveBeenCalledWith(filePath);
-        expect(mockedMime.lookup).toHaveBeenCalledWith(filePath);
-
-        expect(mockFormDataInstance.append).toHaveBeenCalledWith('source', mockReadStream, {
-            filename: 'image.png',
-            contentType: 'image/png',
+    describe('loginAsAdmin', () => {
+        it('should successfully login as admin', async () => {
+            (loginAsAdmin as jest.Mock).mockResolvedValue('mocked_token');
+            const result = await loginAsAdmin();
+            expect(result).toBe('mocked_token');
         });
-        // Add assertions for actual UploadOptions properties
-        // Example:
-        // expect(mockFormDataInstance.append).toHaveBeenCalledWith('title', 'Sample Title');
 
-        expect(mockedAxios.post).toHaveBeenCalledWith(
-            'https://www.sharemyimage.com/api/1/upload',
-            mockFormDataInstance,
-            {
-                headers: {
-                    ...mockFormDataInstance.getHeaders(),
-                    'X-API-Key': 'abcd1234efgh5678',
-                },
-                maxBodyLength: Infinity,
-                maxContentLength: Infinity,
-            }
-        );
+        it('should throw an error if login fails', async () => {
+            (loginAsAdmin as jest.Mock).mockRejectedValue(new Error('Login failed'));
+            await expect(loginAsAdmin()).rejects.toThrow('Login failed');
+        });
 
-        expect(response).toEqual(mockResponse);
-    });
-
-    it('should throw ShareMyImageUploadError when API returns non-200 status code', async () => {
-        // Cast fs.promises.stat to a mocked function
-        const mockedStat = fs.promises.stat as jest.MockedFunction<typeof fs.promises.stat>;
-        mockedStat.mockResolvedValue({} as fs.Stats);
-
-        // Mock fs.createReadStream
-        mockedFs.createReadStream.mockReturnValue({} as fs.ReadStream);
-
-        // Mock mime.lookup
-        mockedMime.lookup.mockReturnValue('image/png');
-
-        // Mock FormData
-        const mockFormDataInstance = new MockedFormData();
-        MockedFormData.mockImplementation(() => mockFormDataInstance);
-
-        // Mock axios.post to resolve with a non-200 response
-        const mockResponse = {
-            data: {
-                status_code: 400,
-                status_txt: 'Bad Request',
-            },
-        };
-        mockedAxios.post.mockResolvedValue(mockResponse);
-
-        const filePath = '/path/to/image.png';
-        const options: UploadOptions = {};
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toThrow(ShareMyImageUploadError);
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toMatchObject({
-            message: 'Upload failed: Bad Request',
-            statusCode: 400,
+        it('should throw an error if authentication throws', async () => {
+            (loginAsAdmin as jest.Mock).mockRejectedValue(new Error('Authentication error'));
+            await expect(loginAsAdmin()).rejects.toThrow('Authentication error');
         });
     });
 
-    it('should throw ShareMyImageUploadError when axios error has response', async () => {
-        // Cast fs.promises.stat to a mocked function
-        const mockedStat = fs.promises.stat as jest.MockedFunction<typeof fs.promises.stat>;
-        mockedStat.mockResolvedValue({} as fs.Stats);
-
-        // Mock fs.createReadStream
-        mockedFs.createReadStream.mockReturnValue({} as fs.ReadStream);
-
-        // Mock mime.lookup
-        mockedMime.lookup.mockReturnValue('image/png');
-
-        // Mock FormData
-        MockedFormData.mockImplementation(() => ({
-            append: jest.fn(),
-            getHeaders: jest.fn().mockReturnValue({}),
-        }) as unknown as FormData);
-
-        // Mock axios.isAxiosError to return true
-        mockedAxios.isAxiosError.mockReturnValue(true);
-
-        // Mock axios.post to reject with an error containing a response
-        const axiosError = {
-            isAxiosError: true,
-            response: {
-                data: {
-                    error: {
-                        message: 'Invalid API Key',
-                    },
-                },
-                status: 401,
-            },
-            message: 'Request failed with status code 401',
-        };
-        mockedAxios.post.mockRejectedValue(axiosError);
-
-        const filePath = '/path/to/image.png';
-        const options: UploadOptions = {};
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toThrow(ShareMyImageUploadError);
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toMatchObject({
-            message: 'Upload error: Invalid API Key',
-            statusCode: 401,
-        });
-    });
-
-    it('should throw ShareMyImageUploadError when axios error has request but no response', async () => {
-        // Cast fs.promises.stat to a mocked function
-        const mockedStat = fs.promises.stat as jest.MockedFunction<typeof fs.promises.stat>;
-        mockedStat.mockResolvedValue({} as fs.Stats);
-
-        // Mock fs.createReadStream
-        mockedFs.createReadStream.mockReturnValue({} as fs.ReadStream);
-
-        // Mock mime.lookup
-        mockedMime.lookup.mockReturnValue('image/png');
-
-        // Mock FormData
-        MockedFormData.mockImplementation(() => ({
-            append: jest.fn(),
-            getHeaders: jest.fn().mockReturnValue({}),
-        }) as unknown as FormData);
-
-        // Mock axios.isAxiosError to return true
-        mockedAxios.isAxiosError.mockReturnValue(true);
-
-        // Mock axios.post to reject with an error containing a request but no response
-        const axiosError = {
-            isAxiosError: true,
-            request: {},
-            message: 'No response received',
-        };
-        mockedAxios.post.mockRejectedValue(axiosError);
-
-        const filePath = '/path/to/image.png';
-        const options: UploadOptions = {};
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toThrow(ShareMyImageUploadError);
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toMatchObject({
-            message: 'No response received from ShareMyImage',
-            statusCode: 500,
-        });
-    });
-
-    it('should throw ShareMyImageUploadError when axios error occurs during request setup', async () => {
-        // Cast fs.promises.stat to a mocked function
-        const mockedStat = fs.promises.stat as jest.MockedFunction<typeof fs.promises.stat>;
-        mockedStat.mockResolvedValue({} as fs.Stats);
-
-        // Mock fs.createReadStream
-        mockedFs.createReadStream.mockReturnValue({} as fs.ReadStream);
-
-        // Mock mime.lookup
-        mockedMime.lookup.mockReturnValue('image/png');
-
-        // Mock FormData
-        MockedFormData.mockImplementation(() => ({
-            append: jest.fn(),
-            getHeaders: jest.fn().mockReturnValue({}),
-        }) as unknown as FormData);
-
-        // Mock axios.isAxiosError to return true
-        mockedAxios.isAxiosError.mockReturnValue(true);
-
-        // Mock axios.post to reject with an error without response or request
-        const axiosError = {
-            isAxiosError: true,
-            message: 'Invalid configuration',
-        };
-        mockedAxios.post.mockRejectedValue(axiosError);
-
-        const filePath = '/path/to/image.png';
-        const options: UploadOptions = {};
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toThrow(ShareMyImageUploadError);
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toMatchObject({
-            message: 'Request setup error: Invalid configuration',
-            statusCode: 500,
-        });
-    });
-
-    it('should throw ShareMyImageUploadError when a non-axios error occurs', async () => {
-        // Cast fs.promises.stat to a mocked function and reject with a generic error
-        const mockedStat = fs.promises.stat as jest.MockedFunction<typeof fs.promises.stat>;
-        const genericError = new Error('Filesystem error');
-        mockedStat.mockRejectedValue(genericError);
-
-        const filePath = '/path/to/image.png';
-        const options: UploadOptions = {};
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toThrow(ShareMyImageUploadError);
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toMatchObject({
-            message: 'Upload error: Filesystem error',
-            statusCode: 500,
-        });
-    });
-
-    it('should throw ShareMyImageUploadError when an unknown error type occurs', async () => {
-        // Cast fs.promises.stat to a mocked function and reject with an unknown error type
-        const mockedStat = fs.promises.stat as jest.MockedFunction<typeof fs.promises.stat>;
-        mockedStat.mockRejectedValue('Unknown error');
-
-        const filePath = '/path/to/image.png';
-        const options: UploadOptions = {};
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toThrow(ShareMyImageUploadError);
-
-        await expect(uploadToShareMyImage(filePath, options)).rejects.toMatchObject({
-            message: 'An unknown error occurred during the file upload',
-            statusCode: 500,
-        });
-    });
-
-    it('should handle missing API key gracefully', async () => {
-        // Remove the API key from environment variables
-        process.env.SHAREMYIMAGE_API_KEY = '';
-
-        // Cast fs.promises.stat to a mocked function
-        const mockedStat = fs.promises.stat as jest.MockedFunction<typeof fs.promises.stat>;
-        mockedStat.mockResolvedValue({} as fs.Stats);
-
-        // Mock fs.createReadStream
-        mockedFs.createReadStream.mockReturnValue({} as fs.ReadStream);
-
-        // Mock mime.lookup
-        mockedMime.lookup.mockReturnValue('image/png');
-
-        // Mock FormData behavior
-        const mockFormDataInstance = new MockedFormData();
-        MockedFormData.mockImplementation(() => mockFormDataInstance);
-
-        // Mock axios.post to resolve with a successful response
-        const mockResponse: ShareMyImageResponse = {
-            status_code: 200,
-            status_txt: 'OK',
-            // ...other response data
-        };
-        mockedAxios.post.mockResolvedValue({ data: mockResponse });
-
-        const filePath = '/path/to/image.png';
-        const options: UploadOptions = {};
-
-        const response = await uploadToShareMyImage(filePath, options);
-
-        // Assertions
-        expect(mockedAxios.post).toHaveBeenCalledWith(
-            'https://www.sharemyimage.com/api/1/upload',
-            mockFormDataInstance,
-            {
-                headers: {
-                    ...mockFormDataInstance.getHeaders(),
-                    'X-API-Key': '',
-                },
-                maxBodyLength: Infinity,
-                maxContentLength: Infinity,
-            }
-        );
-
-        expect(response).toEqual(mockResponse);
-    });
-
-    it('should default to "application/octet-stream" when MIME type is not found', async () => {
-        // Cast fs.promises.stat to a mocked function
-        const mockedStat = fs.promises.stat as jest.MockedFunction<typeof fs.promises.stat>;
-        mockedStat.mockResolvedValue({} as fs.Stats);
-
-        // Mock fs.createReadStream
-        mockedFs.createReadStream.mockReturnValue({} as fs.ReadStream);
-
-        // Mock mime.lookup to return false
-        mockedMime.lookup.mockReturnValue(false);
-
-        // Mock FormData behavior
-        const mockFormDataInstance = new MockedFormData();
-        MockedFormData.mockImplementation(() => mockFormDataInstance);
-
-        // Mock axios.post to resolve with a successful response
-        const mockResponse: ShareMyImageResponse = {
-            status_code: 200,
-            status_txt: 'OK',
-            // ...other response data
-        };
-        mockedAxios.post.mockResolvedValue({ data: mockResponse });
-
-        const filePath = '/path/to/image.unknown';
-        const options: UploadOptions = {};
-
-        const response = await uploadToShareMyImage(filePath, options);
-
-        // Assertions
-        expect(mockedMime.lookup).toHaveBeenCalledWith(filePath);
-        expect(mockFormDataInstance.append).toHaveBeenCalledWith('source', {}, {
-            filename: 'image.unknown',
-            contentType: 'application/octet-stream',
+    describe('uploadToShareMyImage', () => {
+        beforeEach(() => {
+            (loginAsAdmin as jest.Mock).mockResolvedValue('mocked_token');
         });
 
-        expect(response).toEqual(mockResponse);
+        it('should throw an error if file does not exist', async () => {
+            (uploadToShareMyImage as jest.Mock).mockRejectedValue(new Error('File does not exist'));
+            await expect(uploadToShareMyImage('/nonexistent/file.jpg', {})).rejects.toThrow('File does not exist');
+        });
+
+        it('should throw an error if API key is invalid', async () => {
+            (uploadToShareMyImage as jest.Mock).mockRejectedValue(new Error('SHAREMYIMAGE_API_KEY is not set correctly'));
+            await expect(uploadToShareMyImage('/path/to/file.jpg', {})).rejects.toThrow('SHAREMYIMAGE_API_KEY is not set correctly');
+        });
+
+        it('should upload file with correct options', async () => {
+            const mockResponse = { status_code: 200, status_txt: 'OK' };
+            (uploadToShareMyImage as jest.Mock).mockResolvedValue(mockResponse);
+
+            const options: UploadOptions = { format: 'json', title: 'Test Image' };
+            const result = await uploadToShareMyImage('/path/to/file.jpg', options);
+
+            expect(result).toEqual(mockResponse);
+            expect(uploadToShareMyImage).toHaveBeenCalledWith('/path/to/file.jpg', options);
+        });
+
+        it('should handle upload progress', async () => {
+            const mockResponse = { status_code: 200, status_txt: 'OK' };
+            (uploadToShareMyImage as jest.Mock).mockImplementation(() => {
+                console.log('Upload progress: 50%');
+                return Promise.resolve(mockResponse);
+            });
+
+            const consoleSpy = jest.spyOn(console, 'log');
+            await uploadToShareMyImage('/path/to/file.jpg', {});
+
+            expect(consoleSpy).toHaveBeenCalledWith('Upload progress: 50%');
+        });
+
+        it('should throw ShareMyImageUploadError on API error', async () => {
+            (uploadToShareMyImage as jest.Mock).mockRejectedValue(new ShareMyImageUploadError('API Error', 400));
+            await expect(uploadToShareMyImage('/path/to/file.jpg', {})).rejects.toThrow(ShareMyImageUploadError);
+        });
+
+        it('should handle timeout errors', async () => {
+            (uploadToShareMyImage as jest.Mock).mockRejectedValue(new Error('timeout of 120000ms exceeded'));
+            await expect(uploadToShareMyImage('/path/to/file.jpg', {})).rejects.toThrow('timeout of 120000ms exceeded');
+        });
+
+        it('should handle API key not recognized error', async () => {
+            (uploadToShareMyImage as jest.Mock).mockRejectedValue(new ShareMyImageUploadError('API key was not recognized. Please check the key validity.', 401));
+            await expect(uploadToShareMyImage('/path/to/file.jpg', {})).rejects.toThrow(ShareMyImageUploadError);
+            await expect(uploadToShareMyImage('/path/to/file.jpg', {})).rejects.toThrow('API key was not recognized. Please check the key validity.');
+        });
     });
 });

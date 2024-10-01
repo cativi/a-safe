@@ -2,50 +2,41 @@
 
 import { FastifyInstance } from 'fastify';
 import { authorizeByPermission } from '../middleware/authMiddleware';
-import {
-    registerJsonSchema,
-    loginJsonSchema,
-    getUserJsonSchema,
-    updateUserJsonSchema,
-    deleteUserJsonSchema,
-    resetPasswordJsonSchema,
-    verifyEmailJsonSchema,
-} from '../schemas/userSchemas';
-import {
-    registerRoute,
-    loginRoute,
-    getAllUsersRoute,
-    getSingleUserRoute,
-    updateUserRoute,
-    deleteUserRoute,
-} from './sharedRoutes';
-import { resetPassword, verifyEmail } from '../services/authService';
+import { registerRoute, loginRoute } from './sharedRoutes';
+import { getAllUsersRoute, getSingleUserRoute, updateUserRoute, deleteUserRoute } from './sharedRoutes';
 
+// Define the authentication and user management routes for the Fastify instance
 const authRoutes = async (fastify: FastifyInstance) => {
+    // Route for user registration
+    fastify.post('/register', registerRoute);
 
-    fastify.post('/register', { schema: registerJsonSchema }, registerRoute);
-    fastify.post('/login', { schema: loginJsonSchema }, loginRoute);
-    fastify.get('/users', { preHandler: [authorizeByPermission(['admin'])] }, getAllUsersRoute);
-    fastify.get('/users/:id', { schema: getUserJsonSchema, preHandler: [authorizeByPermission(['admin', 'user'])] }, getSingleUserRoute);
-    fastify.put('/users/:id', { schema: updateUserJsonSchema, preHandler: [authorizeByPermission(['admin', 'user'])] }, updateUserRoute);
-    fastify.delete('/users/:id', { schema: deleteUserJsonSchema, preHandler: [authorizeByPermission(['admin'])] }, deleteUserRoute);
+    // Route for user login
+    fastify.post('/login', loginRoute);
 
-    // Auth-specific routes
-    fastify.post('/reset-password', { schema: resetPasswordJsonSchema }, async (request, reply) => {
-        const { email } = request.body as { email: string };
-        await resetPassword(email);
-        reply.send({ message: 'Password reset email sent' });
+    // Admin-only route to get all users
+    fastify.get('/users', {
+        preHandler: [authorizeByPermission(['admin'])], // Middleware to restrict access to admins only
+        handler: getAllUsersRoute, // Handler function for getting all users
     });
 
-    fastify.get('/verify-email/:token', { schema: verifyEmailJsonSchema }, async (request, reply) => {
-        const { token } = request.params as { token: string };
-        const result = await verifyEmail(token);
-        if (result) {
-            reply.send({ message: 'Email verified successfully' });
-        } else {
-            reply.code(400).send({ error: 'Invalid or expired verification token' });
-        }
+    // Route to get a single user by ID, accessible by admins and the user themselves
+    fastify.get('/users/:id', {
+        preHandler: [authorizeByPermission(['admin', 'user'])], // Middleware to restrict access to admins and the specific user
+        handler: getSingleUserRoute, // Handler function for getting a single user by ID
+    });
+
+    // Route to update user information, accessible by admins and the user themselves
+    fastify.put('/users/:id', {
+        preHandler: [authorizeByPermission(['admin', 'user'])], // Middleware to restrict access to admins and the specific user
+        handler: updateUserRoute, // Handler function for updating user information
+    });
+
+    // Admin-only route to delete a user
+    fastify.delete('/users/:id', {
+        preHandler: [authorizeByPermission(['admin'])], // Middleware to restrict access to admins only
+        handler: deleteUserRoute, // Handler function for deleting a user
     });
 };
 
+// Export the authRoutes function for use in the Fastify server configuration
 export default authRoutes;

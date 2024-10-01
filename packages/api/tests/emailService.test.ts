@@ -1,7 +1,7 @@
 // a-safe/packages/api/tests/emailService.test.ts:
 
 import nodemailer from 'nodemailer';
-import { sendEmail, createTransporter, setTransporter } from '../utils/emailService';
+import { sendEmail, createTransporter } from '../utils/emailService';
 
 jest.mock('nodemailer');
 
@@ -11,47 +11,34 @@ describe('Email Service', () => {
 
     beforeEach(() => {
         jest.resetModules();
-        process.env.EMAIL_HOST = 'smtp.example.com';
-        process.env.EMAIL_PORT = '587';
-        process.env.EMAIL_SECURE = 'false';
         process.env.EMAIL_USER = 'user@example.com';
         process.env.EMAIL_PASS = 'password';
-        process.env.EMAIL_FROM = 'sender@example.com';
-
         (nodemailer.createTransport as jest.Mock).mockReturnValue(mockTransporter);
-        setTransporter(mockTransporter as unknown as nodemailer.Transporter);
     });
 
     it('should send an email successfully', async () => {
         mockSendMail.mockResolvedValue('Email sent');
-
         await sendEmail('recipient@example.com', 'Test Subject', 'Test Body');
-
         expect(mockSendMail).toHaveBeenCalledWith({
-            from: 'sender@example.com',
+            from: 'user@example.com',
             to: 'recipient@example.com',
             subject: 'Test Subject',
             text: 'Test Body',
         });
     });
 
-    it('should throw an error if sending email fails', async () => {
+    it('should log error if sending email fails', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
         mockSendMail.mockRejectedValue(new Error('SMTP error'));
-
-        await expect(sendEmail('recipient@example.com', 'Test Subject', 'Test Body'))
-            .rejects
-            .toThrow('Failed to send email');
-
-        expect(mockSendMail).toHaveBeenCalled();
+        await sendEmail('recipient@example.com', 'Test Subject', 'Test Body');
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Error sending email:', expect.any(Error));
+        consoleErrorSpy.mockRestore();
     });
 
     it('should create transporter with correct config', () => {
         createTransporter();
-
         expect(nodemailer.createTransport).toHaveBeenCalledWith({
-            host: 'smtp.example.com',
-            port: 587,
-            secure: false,
+            service: 'gmail',
             auth: {
                 user: 'user@example.com',
                 pass: 'password',
@@ -59,21 +46,14 @@ describe('Email Service', () => {
         });
     });
 
-    it('should use default port if EMAIL_PORT is not set', () => {
-        delete process.env.EMAIL_PORT;
-        createTransporter();
-
-        expect(nodemailer.createTransport).toHaveBeenCalledWith(expect.objectContaining({
-            port: 587,
-        }));
-    });
-
-    it('should set secure to true if EMAIL_SECURE is "true"', () => {
-        process.env.EMAIL_SECURE = 'true';
-        createTransporter();
-
-        expect(nodemailer.createTransport).toHaveBeenCalledWith(expect.objectContaining({
-            secure: true,
-        }));
+    it('should log success message when email is sent (non-test environment)', async () => {
+        const originalEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'development';
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+        mockSendMail.mockResolvedValue('Email sent');
+        await sendEmail('recipient@example.com', 'Test Subject', 'Test Body');
+        expect(consoleLogSpy).toHaveBeenCalledWith('Email sent successfully');
+        consoleLogSpy.mockRestore();
+        process.env.NODE_ENV = originalEnv;
     });
 });

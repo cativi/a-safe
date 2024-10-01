@@ -5,6 +5,7 @@
 
 import { PrismaClient } from '@prisma/client'
 
+// Declare a global Prisma client instance to be reused across the application
 declare global {
-    var prisma: PrismaClient
+    var prisma: PrismaClient // Add a global `prisma` variable of type `PrismaClient`
 }
