@@ -1,5 +1,7 @@
 // a-safe/packages/api/server.ts
 
+console.log('Starting server initialization');
+
 import dotenv from 'dotenv';
 dotenv.config(); // Load environment variables from the .env file
 
@@ -25,6 +27,8 @@ import { AdvancedNotificationService } from './services/notificationService';
 import { DateUtils } from '../shared-utils';
 import errorHandler from './utils/errorHandler';
 
+console.log('Imports completed');
+
 // Handle unhandled promise rejections to prevent crashes
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
@@ -41,6 +45,7 @@ declare module 'fastify' {
     }
 }
 
+console.log('Environment loaded, starting to build app');
 // Function to build the Fastify app instance
 export function buildApp(opts: FastifyServerOptions = {}, testing = false): FastifyInstance {
     const app: FastifyInstance = Fastify({
@@ -69,6 +74,7 @@ export function buildApp(opts: FastifyServerOptions = {}, testing = false): Fast
 
     // Register plugins for app functionality
     if (!testing && process.env.NODE_ENV !== 'test') {
+        console.log('Registering plugins');
         // Register JWT for authentication
         app.register(fastifyJwt, {
             secret: process.env.JWT_SECRET || (() => { throw new Error('JWT_SECRET is not set in environment variables'); })(),
@@ -108,6 +114,7 @@ export function buildApp(opts: FastifyServerOptions = {}, testing = false): Fast
             max: 100,
             timeWindow: '1 minute',
         });
+        console.log('Plugins registered');
     }
 
     // Define an authentication middleware for protected routes
@@ -122,6 +129,7 @@ export function buildApp(opts: FastifyServerOptions = {}, testing = false): Fast
     // Set up Swagger for API documentation
     setupSwagger(app, {});
 
+    console.log('Registering routes');
     // Register public routes
     app.register(authRoutes, { prefix: '/auth' });
     app.get('/health', healthCheckRoute);
@@ -132,9 +140,11 @@ export function buildApp(opts: FastifyServerOptions = {}, testing = false): Fast
 
     if (process.env.NODE_ENV !== 'test') {
         app.ready().then(() => {
+            console.log('Socket.IO and notification service initializing');
             const io = new SocketIOServer(app.server);
             notificationService = new AdvancedNotificationService(io);
             app.notificationService = notificationService; // Assign it to FastifyInstance
+            console.log('Socket.IO and notification service initialized');
         });
     }
 
@@ -188,6 +198,7 @@ export function buildApp(opts: FastifyServerOptions = {}, testing = false): Fast
         done();
     });
 
+    console.log('App built successfully');
     return app;
 }
 
@@ -209,16 +220,20 @@ signals.forEach((signal) => {
 
 // Function to start the server
 export const start = async () => {
-    app = buildApp();
+    console.log('Starting server...');
     try {
+        await prisma.$connect();
+        console.log('Database connected successfully');
+
+        app = buildApp();
         const port = process.env.PORT ? parseInt(process.env.PORT) : 3003;
         const host = process.env.HOST || '0.0.0.0';
+        console.log(`Attempting to listen on ${host}:${port}`);
         await app.listen({ port, host });
+        console.log(`Server is now listening on ${host}:${port}`);
     } catch (err) {
-        if (app) {
-            app.log.error(err);
-        }
-        throw err;
+        console.error('Failed to start server:', err);
+        process.exit(1);
     }
 };
 
